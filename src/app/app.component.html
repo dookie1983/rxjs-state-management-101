@@ -1,8 +1,10 @@
 <div>
-  Stock limit: <button >-</button>
-  <button >+</button>
+  Stock limit: <button (click)="store.decreaseLimit(10)">-</button>
+  {{ store.limit$| async}}
+  <button (click)="store.increaseLimit(10)">+</button>
 </div>
 <div>
-  Stock offset: <button>-</button>
-  <button>+</button>
+  Stock offset: <button (click)="store.decreaseOffset(10)">-</button>
+  {{ store.offset$| async}}
+  <button (click)="store.increaseOffset(10)">+</button>
 </div>
