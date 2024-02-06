@@ -1,6 +1,8 @@
 import { Injectable } from '@angular/core';
-import { BehaviorSubject, Observable, Subject, distinctUntilChanged, map, shareReplay } from 'rxjs';
+import { BehaviorSubject, NEVER, Observable, Subject, Subscription, catchError, distinctUntilChanged, map, shareReplay, switchMap, tap, withLatestFrom } from 'rxjs';
 import { StockState } from '../app/interface/stock-state';
+import { HttpClient } from '@angular/common/http';
+import { Stock } from '../app/interface/stock';
 
 @Injectable({
   providedIn: 'root'
@@ -8,8 +10,9 @@ import { StockState } from '../app/interface/stock-state';
 
 export class StoreService {
   private state = new BehaviorSubject<StockState>({
-    limit: 10,
-    offset: 0
+    limit: 0,
+    offset: 0,
+    stocks: []
   });
 
   private increaseLimitAction = new Subject<number>();
@@ -17,10 +20,32 @@ export class StoreService {
   private increaseOffsetAction = new Subject<number>();
   private decreaseOffsetAction = new Subject<number>();
 
+  private loadStockAction = new Subject<void>();
+  private loadStockSuccessAction = new Subject<Stock[]>();
+  private loadStockErrorAction = new Subject<any>();
+
   limit$ = this.createSelector(state => state.limit);
   offset$ = this.createSelector(state => state.offset);
 
-  constructor() {
+  stocks$ = this.createSelector(state => state.stocks);
+
+  constructor(private http:HttpClient) {
+
+    this.createEffect(this.loadStockAction.pipe(
+      withLatestFrom(this.limit$,this.offset$),
+      switchMap(([_,limit,offset]) => {
+        return this.http.get<Stock[]>(`http://localhost:3000/stocks?limit=${limit}&offset=${offset}`)
+          .pipe(catchError(err => {
+            console.log('error',err)
+            this.loadStockErrorAction.next(err);
+            return NEVER;
+          }))
+      }), tap(response => {
+        console.log(response)
+        this.loadStockSuccessAction.next(response);
+      })
+    ))
+
     this.createReducer(this.increaseLimitAction, (state, limit) => {
       state.limit += limit;
       return state;
@@ -40,6 +65,15 @@ export class StoreService {
       state.offset -= offset;
       return state;
     });
+
+    this.createEffect(this.loadStockErrorAction.pipe(tap(err => {
+      console.error(err);
+    })))
+
+    this.createReducer(this.loadStockSuccessAction, (state, stocks) => {
+      state.stocks = stocks
+      return state;
+    });
   }
 
   increaseLimit(limit: number) {
@@ -53,6 +87,10 @@ export class StoreService {
   }
   decreaseOffset(offset: number) {
     this.decreaseOffsetAction.next(offset)
+  }
+
+  loadStock(){
+    this.loadStockAction.next();
   }
 
   private createReducer<T>(
@@ -73,4 +111,9 @@ export class StoreService {
       shareReplay(1)
     );
   }
+
+  private createEffect<T>(effect$: Observable<T>): Subscription {
+    return effect$.subscribe();
+  }
+
 }
